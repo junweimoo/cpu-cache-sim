@@ -3,4 +3,6 @@ project(cpu_cache_sim)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(cpu_cache_sim main.cpp)
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+
+add_executable(cpu_cache_sim ${SOURCES})
