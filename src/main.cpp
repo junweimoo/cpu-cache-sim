@@ -27,6 +27,5 @@ int main(int argc, char* argv[]) {
     cpu.connectMemory(&memory);
     cpu.run(trace);
 
-    std::cout << "Simulation finished!" << std::endl;
     return 0;
 }

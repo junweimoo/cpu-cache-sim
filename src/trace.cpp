@@ -20,15 +20,20 @@ bool Trace::read_data(const std::string& filename) {
         if (line.empty()) continue;
 
         std::istringstream iss(line);
-        int type_int;
+        std::string type_str;
         std::string value_str;
 
-        if (!(iss >> type_int >> value_str)) {
+        if (!(iss >> type_str >> value_str)) {
             std::cerr << "Error: Invalid format at line " << line_number << ": '"
                       << line << "'. Skipping." << std::endl;
             continue;
         }
 
+        if (type_str == "//") {
+            continue;
+        }
+
+        int type_int = std::stoi(type_str);
         InstructionType type;
         switch (type_int) {
         case 0:

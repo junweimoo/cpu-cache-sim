@@ -21,7 +21,7 @@ void CPU::run(Trace& trace) {
     while (i < 10 && trace.has_next_instruction()) {
         const Instruction& ins = trace.get_current_instruction();
 
-        std::cout << ins.type << " " << ins.value << std::endl;
+        std::cout << ins.type << " " << std::hex << ins.value << std::endl;
 
         std::pair<int, bool> p;
         int this_cycles = 0;
@@ -56,10 +56,11 @@ void CPU::run(Trace& trace) {
         }
 
         total_cycles += this_cycles;
-        std::cout << "cycles: " << this_cycles << std::endl;
+        std::cout << "cycles: " << std::dec << this_cycles << std::endl;
 
         i++;
     }
+    std::cout << "Simulation finished!" << std::endl << std::endl;
 
     std::cout << "Total cycles: " << total_cycles << std::endl;
     std::cout << "Compute cycles: " << compute_cycles << std::endl;

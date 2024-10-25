@@ -25,19 +25,19 @@ std::pair<int, bool> Memory::load(uint32_t address) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.lookup(tag)) {
-        // cache hit
+    if (cache_set.read(tag)) {
+        // cache hit -> load from cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
-    // cache miss
-    if (cache_set.insert(tag)) {
+    // cache miss -> allocate
+    if (cache_set.allocate(tag, false)) {
         // least recently used tag evicted
-        // fetch from memory + from cache + flush dirty block to memory
+        // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
         // no evictions
-        // fetch from memory + from cache
+        // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
     }
 }
@@ -47,19 +47,21 @@ std::pair<int, bool> Memory::store(uint32_t address) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.lookup(tag)) {
-        // cache hit
+    if (cache_set.write(tag)) {
+        // cache hit -> write to cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
-    // cache miss
-    if (cache_set.insert(tag)) {
-        // least recently used tag evicted
-        // fetch from memory + from cache + flush dirty block to memory
+    // cache miss -> allocate
+    if (cache_set.allocate(tag, true)) {
+
+        // least recently used tag flushed
+        // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
-        // no evictions
-        // fetch from memory + from cache
+
+        // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
+        // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
     }
 }
