@@ -1,11 +1,30 @@
 #ifndef MEMORY_H
 #define MEMORY_H
+#include <vector>
+
+#include "cache.h"
 
 class Memory {
 public:
-    Memory();
-    int load(int address);
-    void store(int address, int value);
+    std::pair<int, bool> load(uint32_t address);
+    std::pair<int, bool> store(uint32_t address);
+    std::tuple<uint32_t, uint32_t, uint32_t> computeTagIdxOffset(uint32_t address) const;
+
+    Memory(int cache_size, int associativity, int block_size, int address_bits);
+private:
+    int cache_size;
+    int associativity;
+    int block_size;
+
+    int offset_bits;
+    int set_index_bits;
+    int tag_bits;
+    uint32_t offset_mask;
+    uint32_t set_index_mask;
+    uint32_t tag_mask;
+
+    // LRU sets indexed by set index
+    std::vector<LRUSet> cache;
 };
 
 #endif
