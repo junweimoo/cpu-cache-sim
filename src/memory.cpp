@@ -1,7 +1,6 @@
 #include "memory.h"
-#include <iostream>
 
-#include "config.h"
+#include "bus.h"
 
 Memory::Memory(int cache_size, int associativity, int block_size, int address_bits = 32) :
         cache_size(cache_size), associativity(associativity), block_size(block_size) {
@@ -17,49 +16,52 @@ Memory::Memory(int cache_size, int associativity, int block_size, int address_bi
     tag_mask = ((1 << tag_bits) - 1) << (offset_bits + set_index_bits);   // e.g. 11111111111111111111110000000000
 
     std::cout << "Memory initialized. Offset: " << offset_bits << " bits. Set Index: "
-              << set_index_bits << " bits. Tag: " << tag_bits << " bits." << std::endl;
+              << set_index_bits << " bits. Tag: " << tag_bits << " bits. "
+              << num_sets << " sets, " << associativity << "-way associative." << std::endl;
 }
 
-std::pair<int, bool> Memory::load(uint32_t address) {
+std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.read(tag)) {
+    if (cache_set.read(tag, bus)) {
         // cache hit -> load from cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
     // cache miss -> allocate
-    if (cache_set.allocate(tag, false)) {
-        // least recently used tag evicted
+    bus->broadcast(Read, address);
+    if (cache_set.allocate(tag, false, bus)) {
+        // least recently used tag flushed
+        bus->broadcast(WriteBack, address);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
-        // no evictions
+        // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
     }
 }
 
-std::pair<int, bool> Memory::store(uint32_t address) {
+std::pair<int, bool> Memory::store(uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.write(tag)) {
+    if (cache_set.write(tag, bus)) {
         // cache hit -> write to cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
     // cache miss -> allocate
-    if (cache_set.allocate(tag, true)) {
-
+    bus->broadcast(ReadExclusive, address);
+    if (cache_set.allocate(tag, true, bus)) {
         // least recently used tag flushed
+        bus->broadcast(WriteBack, address);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
-
         // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};

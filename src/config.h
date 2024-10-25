@@ -6,6 +6,7 @@ namespace Config {
      constexpr int MEM_FETCH_TIME = 100;
      constexpr int MEM_FLUSH_TIME = 100;
      constexpr int ADDRESS_BITS = 32;
+     constexpr int WORD_SIZE_BITS = 32;
 }
 
 #endif //CONFIG_H

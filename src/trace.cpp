@@ -1,7 +1,4 @@
 #include "trace.h"
-#include <fstream>
-#include <sstream>
-#include <iostream>
 
 Trace::Trace() : current_instruction(0) {}
 
@@ -78,7 +75,7 @@ bool Trace::read_data(const std::string& filename) {
         return false;
     }
 
-    std::cout << "Successfully loaded " << data.size() << " instructions from '" << filename << "'." << std::endl;
+    std::cout << "Successfully loaded " << data.size() << " instructions from '" << filename << "'." << std::endl << std::endl;
     return true;
 }
 

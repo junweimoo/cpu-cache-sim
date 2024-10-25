@@ -1,13 +1,18 @@
 #ifndef MEMORY_H
 #define MEMORY_H
-#include <vector>
 
+#include <vector>
+#include <iostream>
+
+#include "config.h"
 #include "cache.h"
+
+class Bus;
 
 class Memory {
 public:
-    std::pair<int, bool> load(uint32_t address);
-    std::pair<int, bool> store(uint32_t address);
+    std::pair<int, bool> load(uint32_t address, Bus* bus);
+    std::pair<int, bool> store(uint32_t address, Bus* bus);
     std::tuple<uint32_t, uint32_t, uint32_t> computeTagIdxOffset(uint32_t address) const;
 
     Memory(int cache_size, int associativity, int block_size, int address_bits);
