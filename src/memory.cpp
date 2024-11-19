@@ -1,6 +1,7 @@
 #include "memory.h"
 
 #include "bus.h"
+#include "config.h"
 
 Memory::Memory(int cache_size, int associativity, int block_size, int address_bits = 32) :
         cache_size(cache_size), associativity(associativity), block_size(block_size) {

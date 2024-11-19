@@ -2,6 +2,7 @@
 #include "trace.h"
 #include "memory.h"
 #include "bus.h"
+#include "config.h"
 
 int main(int argc, char* argv[]) {
     if (argc != 6) {
