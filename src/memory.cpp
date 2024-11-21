@@ -3,8 +3,10 @@
 #include "bus.h"
 #include "config.h"
 
-Memory::Memory(int cache_size, int associativity, int block_size, int address_bits = 32) :
+Memory::Memory(int _index, int cache_size, int associativity, int block_size, int address_bits = 32) :
         cache_size(cache_size), associativity(associativity), block_size(block_size) {
+    index = _index;
+
     int num_sets = cache_size / (block_size * associativity);
     cache.resize(num_sets, LRUSet(associativity));
 
@@ -21,6 +23,13 @@ Memory::Memory(int cache_size, int associativity, int block_size, int address_bi
               << num_sets << " sets, " << associativity << "-way associative." << std::endl;
 }
 
+void Memory::process_signal_from_bus(BusMessage message, uint32_t address) {
+    uint32_t offset, set_index, tag;
+    std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
+    LRUSet& cache_set = cache[set_index];
+    cache_set.process_signal_from_bus(tag, message);
+}
+
 std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
@@ -32,10 +41,10 @@ std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
     }
 
     // cache miss -> allocate
-    bus->broadcast(Read, address);
+    bus->broadcast(Read, address, index);
     if (cache_set.allocate(tag, false, bus)) {
         // least recently used tag flushed
-        bus->broadcast(WriteBack, address);
+        bus->broadcast(WriteBack, address, index);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
@@ -56,10 +65,10 @@ std::pair<int, bool> Memory::store(uint32_t address, Bus* bus) {
     }
 
     // cache miss -> allocate
-    bus->broadcast(ReadExclusive, address);
+    bus->broadcast(ReadExclusive, address, index);
     if (cache_set.allocate(tag, true, bus)) {
         // least recently used tag flushed
-        bus->broadcast(WriteBack, address);
+        bus->broadcast(WriteBack, address, index);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {

@@ -2,6 +2,7 @@
 #define BUS_H
 
 #include <cstdint>
+#include <vector>
 
 class Memory;
 
@@ -14,7 +15,7 @@ enum BusMessage {
 
 class Bus {
 public:
-    void broadcast(BusMessage message_type, uint32_t address);
+    void broadcast(BusMessage message_type, uint32_t address, int sender_idx);
     long get_total_traffic() const;
     long get_total_invalidations() const;
     void connect_memory(Memory* mem);
@@ -26,7 +27,7 @@ private:
     long total_invalidations;
     int block_size;
 
-    Memory* memory;
+    std::vector<Memory*> memory_blocks;
 };
 
 #endif //BUS_H

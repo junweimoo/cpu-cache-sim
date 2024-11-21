@@ -3,6 +3,8 @@
 
 #include <list>
 
+#include "bus.h"
+
 enum CacheState {
     Modified,
     Exclusive,
@@ -20,6 +22,8 @@ public:
     bool read(uint32_t tag, Bus* bus);
     // returns true if the least recently used tag is evicted
     bool allocate(uint32_t tag, bool is_write, Bus* bus);
+    // process bus signal according to protocol
+    void process_signal_from_bus(uint32_t tag, BusMessage message);
 
     explicit LRUSet(int associativity);
 private:

@@ -62,3 +62,33 @@ bool LRUSet::read(uint32_t tag, Bus* bus) {
     tags.splice(tags.begin(), tags, it->second);
     return true;
 }
+
+void LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message) {
+    auto map_iter = map.find(tag);
+    auto tags_iter = map_iter->second;
+    CacheState current_state = tags_iter->second;
+
+    switch (message) {
+        case BusMessage::Read:
+            if (current_state == Modified) {
+                tags_iter->second = Shared;
+            } else if (current_state == Exclusive) {
+                tags_iter->second = Shared;
+            }
+            break;
+        case BusMessage::Invalidate:
+            tags_iter->second = Invalid;
+            break;
+        case BusMessage::ReadExclusive:
+            if (current_state == Modified) {
+                tags_iter->second = Invalid;
+            } else if (current_state == Exclusive) {
+                tags_iter->second = Invalid;
+            } else if (current_state == Shared) {
+                tags_iter->second = Invalid;
+            }
+            break;
+        case BusMessage::WriteBack:
+            break;
+    }
+}

@@ -23,8 +23,10 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+
+
     // set up system
-    Memory memory(cache_size, associativity, block_size, Config::ADDRESS_BITS);
+    Memory memory(0, cache_size, associativity, block_size, Config::ADDRESS_BITS);
 
     Bus bus(block_size);
     bus.connect_memory(&memory);
