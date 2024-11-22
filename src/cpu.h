@@ -9,13 +9,15 @@ class Trace;
 
 class CPU {
 public:
-    void connectMemory(Memory* mem);
     void connectBus(Bus* bus);
-    void run(Trace& trace);
+    void run();
+    void add_core(Trace* trace, Memory* memory);
 
     CPU();
+    ~CPU();
 private:
-    Memory* memory;
+    std::vector<Trace*> traces;
+    std::vector<Memory*> memories;
     Bus* bus;
 };
 

@@ -6,15 +6,21 @@
 
 CPU::CPU() {}
 
-void CPU::connectMemory(Memory* mem) {
-    memory = mem;
+CPU::~CPU() {
+    for (Memory* memory : memories) delete memory;
+    for (Trace* trace : traces) delete trace;
+}
+
+void CPU::add_core(Trace *trace, Memory *memory) {
+    traces.push_back(trace);
+    memories.push_back(memory);
 }
 
 void CPU::connectBus(Bus *_bus) {
     bus = _bus;
 }
 
-void CPU::run(Trace& trace) {
+void CPU::run() {
     std::cout << "Running CPU simulation..." << std::endl;
 
     long long total_cycles = 0;
@@ -29,49 +35,60 @@ void CPU::run(Trace& trace) {
     auto start = std::chrono::high_resolution_clock::now();
 
     int i = 0;
-    while (trace.has_next_instruction()) {
-        const Instruction& ins = trace.get_current_instruction();
+    bool is_over = false;
 
-        // std::cout << ins.type << " " << std::hex << ins.value << std::endl;
+    while (!is_over) {
+        is_over = true;
+        for (int j = 0; j < memories.size(); j++) {
+            if (!traces[j]->has_next_instruction()) continue;
 
-        std::pair<int, bool> p;
-        int this_cycles = 0;
-        switch (ins.type) {
-        case LOAD:
-            p = memory->load(ins.value, bus);
-            this_cycles = p.first;
-            if (p.second) {
-                cache_hits++;
-            } else {
-                cache_misses++;
+            is_over = false;
+
+            const Instruction& ins = traces[j]->get_current_instruction();
+
+            // std::cout << ins.type << " " << std::hex << ins.value << std::endl;
+
+            std::pair<int, bool> p;
+            int this_cycles = 0;
+            switch (ins.type) {
+            case LOAD:
+                p = memories[j]->load(ins.value, bus);
+
+                this_cycles = p.first;
+                if (p.second) {
+                    cache_hits++;
+                } else {
+                    cache_misses++;
+                }
+                load_store_ins++;
+                load_ins++;
+                idle_cycles += this_cycles;
+                break;
+            case STORE:
+                p = memories[j]->store(ins.value, bus);
+
+                this_cycles = p.first;
+                if (p.second) {
+                    cache_hits++;
+                } else {
+                    cache_misses++;
+                }
+                load_store_ins++;
+                store_ins++;
+                idle_cycles += this_cycles;
+                break;
+            case OTHER:
+                this_cycles = ins.value;
+                compute_cycles += this_cycles;
+                break;
+            default:
             }
-            load_store_ins++;
-            load_ins++;
-            idle_cycles += this_cycles;
-            break;
-        case STORE:
-            p = memory->store(ins.value, bus);
-            this_cycles = p.first;
-            if (p.second) {
-                cache_hits++;
-            } else {
-                cache_misses++;
-            }
-            load_store_ins++;
-            store_ins++;
-            idle_cycles += this_cycles;
-            break;
-        case OTHER:
-            this_cycles = ins.value;
-            compute_cycles += this_cycles;
-            break;
-        default:
+
+            total_cycles += this_cycles;
+            i++;
+
+            // std::cout << "cycles: " << std::dec << this_cycles << std::endl;
         }
-
-        total_cycles += this_cycles;
-        i++;
-
-        // std::cout << "cycles: " << std::dec << this_cycles << std::endl;
     }
 
     auto end = std::chrono::high_resolution_clock::now();

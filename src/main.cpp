@@ -4,6 +4,8 @@
 #include "bus.h"
 #include "config.h"
 
+#define NUM_PROCESSORS 1
+
 int main(int argc, char* argv[]) {
     if (argc != 6) {
         std::cerr << "Usage: " << argv[0] << " <protocol> <filename> <cache_size> <associativity> <block_size>" << std::endl;
@@ -17,24 +19,27 @@ int main(int argc, char* argv[]) {
     int associativity = atoi(argv[4]);
     int block_size = atoi(argv[5]);
 
-    // read data from file
-    Trace trace;
-    if (!trace.read_data(filename)) {
-        return EXIT_FAILURE;
-    }
-
-
-
-    // set up system
-    Memory memory(0, cache_size, associativity, block_size, Config::ADDRESS_BITS);
-
     Bus bus(block_size);
-    bus.connect_memory(&memory);
 
     CPU cpu;
-    cpu.connectMemory(&memory);
     cpu.connectBus(&bus);
-    cpu.run(trace);
+
+    for (int i = 0; i < NUM_PROCESSORS; i++) {
+        // read data from file
+        Trace* trace = new Trace();
+        if (!trace->read_data(filename)) {
+            return EXIT_FAILURE;
+        }
+
+        // set up memory
+        Memory* memory = new Memory(0, cache_size, associativity, block_size, Config::ADDRESS_BITS);
+        bus.connect_memory(memory);
+
+        cpu.add_core(trace, memory);
+    }
+
+    // simulate
+    cpu.run();
 
     return 0;
 }
