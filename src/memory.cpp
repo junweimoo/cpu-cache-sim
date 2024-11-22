@@ -23,11 +23,11 @@ Memory::Memory(int _index, int cache_size, int associativity, int block_size, in
               << num_sets << " sets, " << associativity << "-way associative." << std::endl;
 }
 
-void Memory::process_signal_from_bus(BusMessage message, uint32_t address) {
+BusResponse Memory::process_signal_from_bus(BusMessage message, uint32_t address) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
     LRUSet& cache_set = cache[set_index];
-    cache_set.process_signal_from_bus(tag, message);
+    return cache_set.process_signal_from_bus(tag, message);
 }
 
 std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
@@ -35,16 +35,14 @@ std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.read(tag, bus)) {
+    if (cache_set.read(tag, bus, address, index)) {
         // cache hit -> load from cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
     // cache miss -> allocate
-    bus->broadcast(Read, address, index);
-    if (cache_set.allocate(tag, false, bus)) {
+    if (cache_set.allocate(tag, false, bus, address, index)) {
         // least recently used tag flushed
-        bus->broadcast(WriteBack, address, index);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
@@ -59,16 +57,14 @@ std::pair<int, bool> Memory::store(uint32_t address, Bus* bus) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.write(tag, bus)) {
+    if (cache_set.write(tag, bus, address, index)) {
         // cache hit -> write to cache
         return {Config::CACHE_HIT_TIME, true};
     }
 
     // cache miss -> allocate
-    bus->broadcast(ReadExclusive, address, index);
-    if (cache_set.allocate(tag, true, bus)) {
+    if (cache_set.allocate(tag, true, bus, address, index)) {
         // least recently used tag flushed
-        bus->broadcast(WriteBack, address, index);
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {

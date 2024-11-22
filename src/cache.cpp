@@ -4,7 +4,7 @@
 LRUSet::LRUSet(int associativity) : max_size(associativity) {
 }
 
-bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus) {
+bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx) {
     auto it = map.find(tag);
 
     if (it != map.end()) {
@@ -23,17 +23,29 @@ bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus) {
 
         if (state == Modified) {
             flushed = true;
+            // Write back flushed element to memory via the bus
+            bus->broadcast(WriteBack, address, sender_idx);
         }
     }
 
+    // send bus signal
+    CacheState stateOfNewLine;
+    if (is_write) {
+        bus->broadcast(ReadExclusive, address, sender_idx);
+        stateOfNewLine = Modified;
+    } else {
+        BusResponse response = bus->broadcast(Read, address, sender_idx);
+        stateOfNewLine = response == IsShared ? Shared : Exclusive;
+    }
+
     // Insert the new element at the front
-    tags.push_front({tag, is_write ? Modified : Exclusive});
+    tags.push_front({tag, stateOfNewLine});
     map[tag] = tags.begin();
 
     return flushed;
 }
 
-bool LRUSet::write(uint32_t tag, Bus* bus) {
+bool LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
     auto map_iter = map.find(tag);
 
     if (map_iter == map.end()) {
@@ -41,8 +53,15 @@ bool LRUSet::write(uint32_t tag, Bus* bus) {
         return false;
     }
 
-    // set dirty bit
     auto tags_iter = map_iter->second;
+
+    // send bus signal
+    CacheState current_state = tags_iter->second;
+    if (current_state == Shared || current_state == Invalid) {
+        bus->broadcast(ReadExclusive, address, sender_idx);
+    }
+
+    // set to modified
     tags_iter->second = Modified;
 
     // move the looked up tag to the front of the tags list
@@ -50,7 +69,7 @@ bool LRUSet::write(uint32_t tag, Bus* bus) {
     return true;
 }
 
-bool LRUSet::read(uint32_t tag, Bus* bus) {
+bool LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
     auto it = map.find(tag);
 
     if (it == map.end()) {
@@ -58,37 +77,60 @@ bool LRUSet::read(uint32_t tag, Bus* bus) {
         return false;
     }
 
+    // send bus signal
+    auto tags_iter = it->second;
+    CacheState current_state = tags_iter->second;
+    if (current_state == Invalid) {
+        BusResponse response = bus->broadcast(Read, address, sender_idx);
+        if (response == IsShared) {
+            tags_iter->second = Shared;
+        } else if (response == NoResponse) {
+            tags_iter->second = Exclusive;
+        }
+    }
+
     // move the looked up tag to the front of the tags list
     tags.splice(tags.begin(), tags, it->second);
     return true;
 }
 
-void LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message) {
+BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message) {
     auto map_iter = map.find(tag);
+
+    if (map_iter == map.end()) {
+        // tag is not in set
+        return NoResponse;
+    }
+
+    // switch state according to protocol
     auto tags_iter = map_iter->second;
     CacheState current_state = tags_iter->second;
-
     switch (message) {
-        case BusMessage::Read:
-            if (current_state == Modified) {
-                tags_iter->second = Shared;
-            } else if (current_state == Exclusive) {
-                tags_iter->second = Shared;
-            }
-            break;
-        case BusMessage::Invalidate:
+    case Read:
+        if (current_state == Modified) {
+            tags_iter->second = Shared;
+        } else if (current_state == Exclusive) {
+            tags_iter->second = Shared;
+        }
+        break;
+    case Invalidate:
+        tags_iter->second = Invalid;
+        break;
+    case ReadExclusive:
+        if (current_state == Modified) {
             tags_iter->second = Invalid;
-            break;
-        case BusMessage::ReadExclusive:
-            if (current_state == Modified) {
-                tags_iter->second = Invalid;
-            } else if (current_state == Exclusive) {
-                tags_iter->second = Invalid;
-            } else if (current_state == Shared) {
-                tags_iter->second = Invalid;
-            }
-            break;
-        case BusMessage::WriteBack:
-            break;
+        } else if (current_state == Exclusive) {
+            tags_iter->second = Invalid;
+        } else if (current_state == Shared) {
+            tags_iter->second = Invalid;
+        }
+        break;
+    case WriteBack:
+        break;
     }
+
+    if (message == Read && (current_state == Modified || current_state == Exclusive || current_state == Shared)) {
+        return IsShared;
+    }
+    return NoResponse;
 }

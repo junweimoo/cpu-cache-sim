@@ -13,9 +13,15 @@ enum BusMessage {
     Invalidate
 };
 
+enum BusResponse {
+    NoResponse,
+    IsShared,
+    IsNotShared
+};
+
 class Bus {
 public:
-    void broadcast(BusMessage message_type, uint32_t address, int sender_idx);
+    BusResponse broadcast(BusMessage message_type, uint32_t address, int sender_idx);
     long get_total_traffic() const;
     long get_total_invalidations() const;
     void connect_memory(Memory* mem);
