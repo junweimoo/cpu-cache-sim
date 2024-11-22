@@ -9,7 +9,7 @@ class Trace;
 
 class CPU {
 public:
-    void connectBus(Bus* bus);
+    void connect_bus(Bus* bus);
     void run();
     void add_core(Trace* trace, Memory* memory);
 

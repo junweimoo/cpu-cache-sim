@@ -3,25 +3,13 @@
 
 #include <cstdint>
 #include <vector>
+#include "enums.h"
 
 class Memory;
 
-enum BusMessage {
-    ReadExclusive,
-    Read,
-    WriteBack,
-    Invalidate
-};
-
-enum BusResponse {
-    NoResponse,
-    IsShared,
-    IsNotShared
-};
-
 class Bus {
 public:
-    BusResponse broadcast(BusMessage message_type, uint32_t address, int sender_idx);
+    BusResponse broadcast(BusMessage message, uint32_t address, int sender_idx, CacheState sender_cache_state);
     long get_total_traffic() const;
     long get_total_invalidations() const;
     void connect_memory(Memory* mem);

@@ -2,16 +2,7 @@
 #define CACHE_H
 
 #include <list>
-
-#include "bus.h"
-
-enum CacheState {
-    Modified,
-    Exclusive,
-    Shared,
-    Invalid,
-    NotPresent
-};
+#include "enums.h"
 
 class Bus;
 
@@ -27,7 +18,8 @@ public:
     bool allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx);
     // process bus signal according to protocol
     BusResponse process_signal_from_bus(uint32_t tag, BusMessage message);
-    static std::string getCacheStateStr(CacheState state);
+    // get string name of cache state for debugging
+    static std::string get_cache_state_str(CacheState state);
 
     explicit LRUSet(int associativity);
 private:

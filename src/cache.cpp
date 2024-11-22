@@ -3,7 +3,7 @@
 #include "cache.h"
 #include "bus.h"
 
-std::string LRUSet::getCacheStateStr(CacheState state) {
+std::string LRUSet::get_cache_state_str(CacheState state) {
     switch (state) {
     case Modified:
         return "Modified";
@@ -50,18 +50,18 @@ bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, i
         if (state == Modified) {
             flushed = true;
             // Write back flushed element to memory via the bus
-            bus->broadcast(WriteBack, address, sender_idx);
+            bus->broadcast(WriteBack, address, sender_idx, state);
         }
     }
 
     // send bus signal
     CacheState stateOfNewLine;
     if (is_write) {
-        bus->broadcast(ReadExclusive, address, sender_idx);
+        bus->broadcast(ReadExclusive, address, sender_idx, NotPresent);
         stateOfNewLine = Modified;
     } else {
-        BusResponse response = bus->broadcast(Read, address, sender_idx);
-        stateOfNewLine = response == IsShared ? Shared : Exclusive;
+        BusResponse response = bus->broadcast(Read, address, sender_idx, NotPresent);
+        stateOfNewLine = response == HasCopy ? Shared : Exclusive;
     }
 
     // Insert the new element at the front
@@ -84,7 +84,7 @@ CacheState LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_id
     // send bus signal
     CacheState current_state = tags_iter->second;
     if (current_state == Shared || current_state == Invalid) {
-        bus->broadcast(ReadExclusive, address, sender_idx);
+        bus->broadcast(ReadExclusive, address, sender_idx, current_state);
     }
 
     // set to modified
@@ -107,8 +107,8 @@ CacheState LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx
     auto tags_iter = it->second;
     CacheState current_state = tags_iter->second;
     if (current_state == Invalid) {
-        BusResponse response = bus->broadcast(Read, address, sender_idx);
-        if (response == IsShared) {
+        BusResponse response = bus->broadcast(Read, address, sender_idx, current_state);
+        if (response == HasCopy) {
             tags_iter->second = Shared;
         } else if (response == NoResponse) {
             tags_iter->second = Exclusive;
@@ -155,8 +155,8 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message) {
         break;
     }
 
-    if (message == Read && (current_state == Modified || current_state == Exclusive || current_state == Shared)) {
-        return IsShared;
+    if (current_state == Modified || current_state == Exclusive || current_state == Shared) {
+        return HasCopy;
     }
     return NoResponse;
 }

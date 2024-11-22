@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     Bus bus(block_size);
 
     CPU cpu;
-    cpu.connectBus(&bus);
+    cpu.connect_bus(&bus);
 
     for (int i = 0; i < NUM_PROCESSORS; i++) {
         std::string core_filename = filename + "_" + std::to_string(i) + ".data";
