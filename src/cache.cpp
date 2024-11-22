@@ -203,7 +203,7 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
         case Read:
             if (current_state == Modified) {
                 tags_iter->second = Shared;
-                bus->broadcast(WriteBack, address, sender_idx, Shared);
+                // bus->broadcast(WriteBack, address, sender_idx, Shared);
             } else if (current_state == Exclusive) {
                 tags_iter->second = Shared;
             }
@@ -211,7 +211,7 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
         case ReadExclusive:
             if (current_state == Modified) {
                 tags_iter->second = Invalid;
-                bus->broadcast(WriteBack, address, sender_idx, Invalid);
+                // bus->broadcast(WriteBack, address, sender_idx, Invalid);
             } else if (current_state == Exclusive) {
                 tags_iter->second = Invalid;
             } else if (current_state == Shared) {
@@ -226,10 +226,10 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
             } else if (current_state == Dirty) {
                 tags_iter->second = SharedModified;
                 // Flush
-                bus->broadcast(WriteBack, address, sender_idx, SharedModified);
+                // bus->broadcast(WriteBack, address, sender_idx, SharedModified);
             } else if (current_state == SharedModified) {
                 // Flush
-                bus->broadcast(WriteBack, address, sender_idx, SharedModified);
+                // bus->broadcast(WriteBack, address, sender_idx, SharedModified);
             }
             break;
         case BusUpdate:

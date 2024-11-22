@@ -21,7 +21,7 @@ void CPU::connect_bus(Bus *_bus) {
 }
 
 void CPU::run() {
-    bool is_debug = true;
+    bool is_debug = false;
 
     std::cout << "Running CPU simulation..." << std::endl;
 
@@ -76,9 +76,9 @@ void CPU::run() {
 
                 idle_cycles_per_core[j] += this_cycles;
 
-                if (from_state == Modified || from_state == Exclusive) {
+                if (from_state == Modified || from_state == Exclusive || from_state == ExclusiveDragon || from_state == Dirty) {
                     private_accesses++;
-                } else if (from_state == Shared) {
+                } else if (from_state == Shared || from_state == SharedModified || from_state == SharedClean) {
                     shared_accesses++;
                 }
 
@@ -99,9 +99,9 @@ void CPU::run() {
 
                 idle_cycles_per_core[j] += this_cycles;
 
-                if (from_state == Modified || from_state == Exclusive) {
+                if (from_state == Modified || from_state == Exclusive || from_state == ExclusiveDragon || from_state == Dirty) {
                     private_accesses++;
-                } else if (from_state == Shared) {
+                } else if (from_state == Shared || from_state == SharedModified || from_state == SharedClean) {
                     shared_accesses++;
                 }
 
@@ -141,6 +141,29 @@ void CPU::run() {
     }
 
     std::cout << "[Global]" << std::endl;
+    long long max_cycles = cycles_per_core[0];
+    for (int j = 1; j < num_cores; j++) {
+        max_cycles = std::max(max_cycles, cycles_per_core[j]);
+    }
+    std::cout << "Total cycles (maximum among cores): " << max_cycles << std::endl;
+
+    long long total_idle_cycles = 0;
+    for (int j = 0; j < num_cores; j++) {
+        total_idle_cycles += idle_cycles_per_core[j];
+    }
+    std::cout << "Total idle cycles: " << total_idle_cycles << std::endl;
+
+    long total_hits = 0;
+    long total_misses = 0;
+    for (int j = 0; j < num_cores; j++) {
+        total_hits += cache_hits_per_core[j];
+        total_misses += cache_misses_per_core[j];
+    }
+    int hit_rate_thousandth = static_cast<float>(total_hits) / (total_hits + total_misses) * 1000;
+    std::cout << "Cache hit rate (%): " << hit_rate_thousandth / 10 << "." << hit_rate_thousandth % 10 << std::endl;
+    int miss_rate_thousandth = 1000 - hit_rate_thousandth;
+    std::cout << "Cache miss rate (%): " << miss_rate_thousandth / 10 << "." << miss_rate_thousandth % 10 << std::endl;
+
     std::cout << "Total bus traffic (bytes): " << bus->get_total_traffic() << std::endl;
     std::cout << "Total bus invalidations / updates: " << bus->get_total_invalidations() << std::endl;
     int private_accesses_thousandth = static_cast<float>(private_accesses) / (private_accesses + shared_accesses) * 1000;

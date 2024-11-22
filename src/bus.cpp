@@ -9,6 +9,10 @@ BusResponse Bus::broadcast(BusMessage message, uint32_t address, int sender_idx,
         return NoResponse;
     }
 
+    if (message == BusUpdate) {
+        total_traffic++;
+    }
+
     BusResponse response = NoResponse;
     for (int i = 0; i < memory_blocks.size(); i++) {
         // broadcast to other memory blocks apart from sender
@@ -23,21 +27,31 @@ BusResponse Bus::broadcast(BusMessage message, uint32_t address, int sender_idx,
                 total_invalidations++;
             }
         }
+
+        if (message == BusUpdate) {
+            total_invalidations++;
+        }
     }
 
-    // if ((message == ReadExclusive || message == Read) &&
-    //     response == HasCopy &&
-    //     (sender_cache_state == Invalid || sender_cache_state == NotPresent)) {
-    //     // traffic for cache-to-cache sharing
-    //     total_traffic++;
-    // }
+    // MESI: cache to cache data transfer over bus
+    if ((message == ReadExclusive || message == Read) &&
+        response == HasCopy &&
+        (sender_cache_state == Invalid || sender_cache_state == NotPresent)) {
+        // traffic for cache-to-cache sharing
+        total_traffic++;
+    }
+
+    // Dragon: cache to cache data transfer over bus
+    if (message == ReadDragon && response == HasCopy && sender_cache_state == NotPresent) {
+        total_traffic++;
+    }
 
     return response;
 }
 
 long Bus::get_total_traffic() const {
-    // return total_traffic * block_size;
-    return total_traffic;
+    return total_traffic * block_size;
+    // return total_traffic;
 }
 
 long Bus::get_total_invalidations() const {
