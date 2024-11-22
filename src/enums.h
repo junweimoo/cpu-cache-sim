@@ -2,24 +2,49 @@
 #define ENUMS_H
 
 enum BusMessage {
+    // MESI
     ReadExclusive,
     Read,
     WriteBack,
-    Invalidate
+
+    // Dragon
+    ReadDragon,
+    BusUpdate,
+
+    // Common
+    NoMessage,
 };
 
 enum BusResponse {
     NoResponse,
     HasCopy,
-    IsNotShared
 };
 
 enum CacheState {
+    // MESI
     Modified,
     Exclusive,
     Shared,
     Invalid,
-    NotPresent
+
+    // Dragon
+    ExclusiveDragon,
+    SharedClean,
+    SharedModified,
+    Dirty,
+
+    // Common
+    NotPresent,
+};
+
+enum ProcessorAction {
+    PrWrite,
+    PrRead,
+};
+
+enum Protocol {
+    MESI,
+    Dragon,
 };
 
 #endif //ENUMS_H

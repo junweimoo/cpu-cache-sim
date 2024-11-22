@@ -21,6 +21,8 @@ void CPU::connect_bus(Bus *_bus) {
 }
 
 void CPU::run() {
+    bool is_debug = true;
+
     std::cout << "Running CPU simulation..." << std::endl;
 
     const size_t num_cores = memories.size();
@@ -80,8 +82,9 @@ void CPU::run() {
                     shared_accesses++;
                 }
 
-                std::cout << j << " [load] prev_state:" << LRUSet::get_cache_state_str(from_state)
-                          << " curr_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
+                if (is_debug)
+                    std::cout << j << " [load] from_state:" << LRUSet::get_cache_state_str(from_state)
+                              << " to_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case STORE:
                 std::tie(this_cycles, is_hit, from_state, to_state) = memories[j]->store(ins.value, bus);
@@ -102,8 +105,9 @@ void CPU::run() {
                     shared_accesses++;
                 }
 
-                std::cout << j << " [store] prev_state:" << LRUSet::get_cache_state_str(from_state)
-                          << " curr_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
+                if (is_debug)
+                    std::cout << j << " [store] from_state:" << LRUSet::get_cache_state_str(from_state)
+                              << " to_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case OTHER:
                 this_cycles = ins.value;
@@ -116,7 +120,7 @@ void CPU::run() {
             cycles_per_core[j] += this_cycles;
             i++;
 
-            // std::cout << "cycles: " << std::dec << this_cycles << std::endl;
+            if (is_debug) std::cout << "cycles: " << std::dec << this_cycles << std::endl;
         }
     }
 

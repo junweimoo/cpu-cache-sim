@@ -18,11 +18,12 @@ public:
     // compute the {tag, set index, offset}
     [[nodiscard]] std::tuple<uint32_t, uint32_t, uint32_t> compute_tag_idx_offset(uint32_t address) const;
     // process bus signal sent from another processor
-    BusResponse process_signal_from_bus(BusMessage message, uint32_t address);
+    BusResponse process_signal_from_bus(BusMessage message, uint32_t address, Bus* bus);
 
-    Memory(int _index, int cache_size, int associativity, int block_size, int address_bits);
+    Memory(int _index, int cache_size, int associativity, int block_size, int address_bits, Protocol _protocol);
 private:
-    int index;
+    Protocol protocol;
+    int core_index;
 
     int cache_size;
     int associativity;

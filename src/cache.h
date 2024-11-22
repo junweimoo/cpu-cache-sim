@@ -10,19 +10,20 @@ class LRUSet {
 public:
     // return state of block with tag
     CacheState get_state(uint32_t tag);
-    // returns true if tag is present
-    CacheState write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx);
-    // returns true if tag is present
-    CacheState read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx);
+    // returns {previous state, whether another copy of this line is present, current state}
+    std::tuple<CacheState, BusResponse, CacheState> write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx);
+    // returns {previous state, whether another copy of this line is present, current_state}
+    std::tuple<CacheState, BusResponse, CacheState> read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx);
     // returns true if the least recently used tag is evicted
-    bool allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx);
+    std::tuple<bool, BusResponse> allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx);
     // process bus signal according to protocol
-    BusResponse process_signal_from_bus(uint32_t tag, BusMessage message);
+    BusResponse process_signal_from_bus(uint32_t tag, BusMessage message, Bus* bus, uint32_t address, int sender_idx);
     // get string name of cache state for debugging
     static std::string get_cache_state_str(CacheState state);
 
-    explicit LRUSet(int associativity);
+    explicit LRUSet(int associativity, Protocol _protocol);
 private:
+    Protocol protocol;
     int max_size;
     // list of pairs of {tag, state}
     std::list<std::pair<uint32_t, CacheState>> tags;

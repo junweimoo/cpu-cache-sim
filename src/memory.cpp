@@ -3,12 +3,13 @@
 #include "bus.h"
 #include "config.h"
 
-Memory::Memory(int _index, int cache_size, int associativity, int block_size, int address_bits = 32) :
+Memory::Memory(int _index, int cache_size, int associativity, int block_size, int address_bits = 32, Protocol _protocol = MESI) :
         cache_size(cache_size), associativity(associativity), block_size(block_size) {
-    index = _index;
+    core_index = _index;
+    protocol = _protocol;
 
     int num_sets = cache_size / (block_size * associativity);
-    cache.resize(num_sets, LRUSet(associativity));
+    cache.resize(num_sets, LRUSet(associativity, _protocol));
 
     offset_bits = std::log2(block_size);
     set_index_bits = std::log2(num_sets);
@@ -23,11 +24,11 @@ Memory::Memory(int _index, int cache_size, int associativity, int block_size, in
               << num_sets << " sets, " << associativity << "-way associative." << std::endl;
 }
 
-BusResponse Memory::process_signal_from_bus(BusMessage message, uint32_t address) {
+BusResponse Memory::process_signal_from_bus(BusMessage message, uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
     LRUSet& cache_set = cache[set_index];
-    return cache_set.process_signal_from_bus(tag, message);
+    return cache_set.process_signal_from_bus(tag, message, bus, address, core_index);
 }
 
 std::tuple<int, bool, CacheState, CacheState> Memory::load(uint32_t address, Bus* bus) {
@@ -35,24 +36,44 @@ std::tuple<int, bool, CacheState, CacheState> Memory::load(uint32_t address, Bus
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
 
     LRUSet& cache_set = cache[set_index];
-    const CacheState prev_state = cache_set.read(tag, bus, address, index);
+    CacheState prev_state, curr_state;
+    BusResponse response;
+    std::tie(prev_state, response, curr_state) = cache_set.read(tag, bus, address, core_index);
 
+    // MESI
     if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
         // cache hit -> load from cache
-        return {Config::CACHE_HIT_TIME, true, prev_state, cache_set.get_state(tag)};
+        return {Config::CACHE_HIT_TIME, true, prev_state, curr_state};
     } else if (prev_state == Invalid) {
         // cache has been invalidated -> load from memory
-        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
+        }
+        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
+    }
+
+    // Dragon
+    if (prev_state == ExclusiveDragon || prev_state == SharedClean || prev_state == SharedModified || prev_state == Dirty) {
+        // cache hit -> load from cache
+        return {Config::CACHE_HIT_TIME, true, prev_state, curr_state};
     }
 
     // cache miss -> allocate
-    if (cache_set.allocate(tag, false, bus, address, index)) {
+    bool is_evicted;
+    std::tie(is_evicted, response) = cache_set.allocate(tag, false, bus, address, core_index);
+    if (is_evicted) {
         // least recently used tag flushed
         // cycles = fetch from memory + from cache + flush dirty block to memory
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false, prev_state, cache_set.get_state(tag)};
+        }
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false, prev_state, cache_set.get_state(tag)};
     } else {
         // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
+        }
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
     }
 }
@@ -62,23 +83,46 @@ std::tuple<int, bool, CacheState, CacheState> Memory::store(uint32_t address, Bu
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
 
     LRUSet& cache_set = cache[set_index];
-    const CacheState prev_state = cache_set.write(tag, bus, address, index);
+    CacheState prev_state, curr_state;
+    BusResponse response;
+    std::tie(prev_state, response, curr_state) = cache_set.write(tag, bus, address, core_index);
 
+    // MESI
     if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
         // cache hit -> write to cache
-        return {Config::CACHE_HIT_TIME, true, prev_state, cache_set.get_state(tag)};
+        return {Config::CACHE_HIT_TIME, true, prev_state, curr_state};
     } else if (prev_state == Invalid) {
-        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
+        }
+        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
+    }
+
+    // Dragon
+    if (prev_state == ExclusiveDragon || prev_state == Dirty) {
+        // cache hit -> load from cache
+        return {Config::CACHE_HIT_TIME, true, prev_state, curr_state};
+    } else if (prev_state == SharedClean || prev_state == SharedModified) {
+        // cache hit -> send update to other caches + load from cache
+        return {Config::CACHE_HIT_TIME + Config::SEND_WORD_TIME, true, prev_state, curr_state};
     }
 
     // cache miss -> allocate
-    if (cache_set.allocate(tag, true, bus, address, index)) {
+    bool is_evicted;
+    std::tie(is_evicted, response) = cache_set.allocate(tag, false, bus, address, core_index);
+    if (is_evicted) {
         // least recently used tag flushed
         // cycles = fetch from memory + from cache + flush dirty block to memory
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false, prev_state, cache_set.get_state(tag)};
+        }
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false, prev_state, cache_set.get_state(tag)};
     } else {
         // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
+        if (response == HasCopy) {
+            return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
+        }
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false, prev_state, cache_set.get_state(tag)};
     }
 }

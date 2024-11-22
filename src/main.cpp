@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     }
 
     // arguments
-    std::string protocol = argv[1];
+    Protocol protocol = std::strcmp(argv[1], "Dragon") == 0 ? Dragon : MESI;
     std::string filename = argv[2];
     int cache_size = atoi(argv[3]);
     int associativity = atoi(argv[4]);
@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
         }
 
         // set up memory
-        Memory* memory = new Memory(i, cache_size, associativity, block_size, Config::ADDRESS_BITS);
+        Memory* memory = new Memory(i, cache_size, associativity, block_size, Config::ADDRESS_BITS, protocol);
         bus.connect_memory(memory);
 
         cpu.add_core(trace, memory);
@@ -42,6 +42,7 @@ int main(int argc, char* argv[]) {
     }
 
     // simulate
+    std::cout << "Protocol: " << (protocol == Dragon ? "Dragon" : "MESI") <<  std::endl;
     cpu.run();
 
     return 0;
