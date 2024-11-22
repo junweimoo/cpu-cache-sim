@@ -35,17 +35,32 @@ std::pair<int, bool> Memory::load(uint32_t address, Bus* bus) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.read(tag, bus, address, index)) {
+    const CacheState prev_state = cache_set.read(tag, bus, address, index);
+
+    if (cache_set.get_state(tag) != NotPresent)
+        std::cout << index << " [load] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
+    if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
         // cache hit -> load from cache
         return {Config::CACHE_HIT_TIME, true};
+    } else if (prev_state == Invalid) {
+        // cache has been invalidated -> load from memory
+        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
     }
 
     // cache miss -> allocate
     if (cache_set.allocate(tag, false, bus, address, index)) {
+        std::cout << index << " [load] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
         // least recently used tag flushed
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
+        std::cout << index << " [load] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
         // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
@@ -57,17 +72,31 @@ std::pair<int, bool> Memory::store(uint32_t address, Bus* bus) {
     std::tie(offset, set_index, tag) = computeTagIdxOffset(address);
 
     LRUSet& cache_set = cache[set_index];
-    if (cache_set.write(tag, bus, address, index)) {
+    const CacheState prev_state = cache_set.write(tag, bus, address, index);
+
+    if (cache_set.get_state(tag) != NotPresent)
+        std::cout << index << " [store] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
+    if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
         // cache hit -> write to cache
         return {Config::CACHE_HIT_TIME, true};
+    } else if (prev_state == Invalid) {
+        return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};
     }
 
     // cache miss -> allocate
     if (cache_set.allocate(tag, true, bus, address, index)) {
+        std::cout << index << " [load] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
         // least recently used tag flushed
         // cycles = fetch from memory + from cache + flush dirty block to memory
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME + Config::MEM_FLUSH_TIME, false};
     } else {
+        std::cout << index << " [load] prev_state:" << LRUSet::getCacheStateStr(prev_state)
+                << " curr_state:" << LRUSet::getCacheStateStr(cache_set.get_state(tag)) << std::endl;
+
         // no flushes (either LRU has no dirty bit, or empty space remaining in the set)
         // cycles = fetch from memory + from cache
         return {Config::MEM_FETCH_TIME + Config::CACHE_HIT_TIME, false};

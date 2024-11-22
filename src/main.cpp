@@ -4,7 +4,7 @@
 #include "bus.h"
 #include "config.h"
 
-#define NUM_PROCESSORS 1
+#define NUM_PROCESSORS 4
 
 int main(int argc, char* argv[]) {
     if (argc != 6) {
@@ -25,17 +25,20 @@ int main(int argc, char* argv[]) {
     cpu.connectBus(&bus);
 
     for (int i = 0; i < NUM_PROCESSORS; i++) {
+        std::string core_filename = filename + "_" + std::to_string(i) + ".data";
+        if (!std::filesystem::exists(core_filename)) break;
         // read data from file
         Trace* trace = new Trace();
-        if (!trace->read_data(filename)) {
+        if (!trace->read_data(core_filename)) {
             return EXIT_FAILURE;
         }
 
         // set up memory
-        Memory* memory = new Memory(0, cache_size, associativity, block_size, Config::ADDRESS_BITS);
+        Memory* memory = new Memory(i, cache_size, associativity, block_size, Config::ADDRESS_BITS);
         bus.connect_memory(memory);
 
         cpu.add_core(trace, memory);
+        std::cout << std::endl;
     }
 
     // simulate

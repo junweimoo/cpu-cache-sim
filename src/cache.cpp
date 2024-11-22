@@ -1,8 +1,34 @@
+#include <string>
+
 #include "cache.h"
 #include "bus.h"
 
+std::string LRUSet::getCacheStateStr(CacheState state) {
+    switch (state) {
+    case Modified:
+        return "Modified";
+    case Exclusive:
+        return "Exclusive";
+    case Shared:
+        return "Shared";
+    case Invalid:
+        return "Invalid";
+    case NotPresent:
+        return "NotPresent";
+    default:
+        return "";
+    }
+}
+
 LRUSet::LRUSet(int associativity) : max_size(associativity) {
 }
+
+CacheState LRUSet::get_state(uint32_t tag) {
+    auto map_iter = map.find(tag);
+    if (map_iter == map.end()) return NotPresent;
+    return map_iter->second->second;
+}
+
 
 bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx) {
     auto it = map.find(tag);
@@ -45,12 +71,12 @@ bool LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, i
     return flushed;
 }
 
-bool LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
+CacheState LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
     auto map_iter = map.find(tag);
 
     if (map_iter == map.end()) {
         // tag is not in the set
-        return false;
+        return NotPresent;
     }
 
     auto tags_iter = map_iter->second;
@@ -66,15 +92,15 @@ bool LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
 
     // move the looked up tag to the front of the tags list
     tags.splice(tags.begin(), tags, tags_iter);
-    return true;
+    return current_state;
 }
 
-bool LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
+CacheState LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
     auto it = map.find(tag);
 
     if (it == map.end()) {
         // tag is not in the set
-        return false;
+        return NotPresent;
     }
 
     // send bus signal
@@ -91,7 +117,7 @@ bool LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
 
     // move the looked up tag to the front of the tags list
     tags.splice(tags.begin(), tags, it->second);
-    return true;
+    return current_state;
 }
 
 BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message) {

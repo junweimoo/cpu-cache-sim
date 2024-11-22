@@ -75,7 +75,7 @@ bool Trace::read_data(const std::string& filename) {
         return false;
     }
 
-    std::cout << "Successfully loaded " << data.size() << " instructions from '" << filename << "'." << std::endl << std::endl;
+    std::cout << "Successfully loaded " << data.size() << " instructions from '" << filename << "'." << std::endl;
     return true;
 }
 
