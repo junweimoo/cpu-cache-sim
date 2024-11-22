@@ -11,10 +11,10 @@ class Bus;
 
 class Memory {
 public:
-    // load from address: returns {number of cycles, whether it's a cache hit}
-    std::pair<int, bool> load(uint32_t address, Bus* bus);
-    // store to address: returns {number of cycles, whether it's a cache hit}
-    std::pair<int, bool> store(uint32_t address, Bus* bus);
+    // load from address: returns {number of cycles, whether it's a cache hit, previous cache state, current cache state}
+    std::tuple<int, bool, CacheState, CacheState> load(uint32_t address, Bus* bus);
+    // store to address: returns {number of cycles, whether it's a cache hit, previous cache state, current cache state}
+    std::tuple<int, bool, CacheState, CacheState> store(uint32_t address, Bus* bus);
     // compute the {tag, set index, offset}
     [[nodiscard]] std::tuple<uint32_t, uint32_t, uint32_t> compute_tag_idx_offset(uint32_t address) const;
     // process bus signal sent from another processor

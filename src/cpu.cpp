@@ -23,16 +23,7 @@ void CPU::connect_bus(Bus *_bus) {
 void CPU::run() {
     std::cout << "Running CPU simulation..." << std::endl;
 
-    long long total_cycles = 0;
-    long long compute_cycles = 0;
-    long long idle_cycles = 0;
-    long load_store_ins = 0;
-    long load_ins = 0;
-    long store_ins = 0;
-    long cache_hits = 0;
-    long cache_misses = 0;
-
-    int num_cores = memories.size();
+    const size_t num_cores = memories.size();
 
     std::vector<long long> cycles_per_core(num_cores, 0);
     std::vector<long long> idle_cycles_per_core(num_cores, 0);
@@ -43,6 +34,9 @@ void CPU::run() {
 
     std::vector<long> loads_per_core(num_cores, 0);
     std::vector<long> stores_per_core(num_cores, 0);
+
+    long shared_accesses = 0;
+    long private_accesses = 0;
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -61,59 +55,65 @@ void CPU::run() {
             // std::cout << ins.type << " " << std::hex << ins.value << std::endl;
 
             std::pair<int, bool> p;
-            int this_cycles = 0;
+
+            int this_cycles;
+            bool is_hit;
+            CacheState from_state, to_state;
+
             switch (ins.type) {
-            case LOAD:
-                p = memories[j]->load(ins.value, bus);
+                case LOAD:
+                std::tie(this_cycles, is_hit, from_state, to_state) = memories[j]->load(ins.value, bus);
 
-                this_cycles = p.first;
-
-                if (p.second) {
+                if (is_hit) {
                     cache_hits_per_core[j]++;
-                    cache_hits++;
                 } else {
                     cache_misses_per_core[j]++;
-                    cache_misses++;
                 }
-
-                load_store_ins++;
 
                 loads_per_core[j]++;
-                load_ins++;
 
                 idle_cycles_per_core[j] += this_cycles;
-                idle_cycles += this_cycles;
+
+                if (from_state == Modified || from_state == Exclusive) {
+                    private_accesses++;
+                } else if (from_state == Shared) {
+                    shared_accesses++;
+                }
+
+                std::cout << j << " [load] prev_state:" << LRUSet::get_cache_state_str(from_state)
+                          << " curr_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case STORE:
-                p = memories[j]->store(ins.value, bus);
+                std::tie(this_cycles, is_hit, from_state, to_state) = memories[j]->store(ins.value, bus);
 
-                this_cycles = p.first;
-                if (p.second) {
+                if (is_hit) {
                     cache_hits_per_core[j]++;
-                    cache_hits++;
                 } else {
                     cache_misses_per_core[j]++;
-                    cache_misses++;
                 }
-                load_store_ins++;
 
                 stores_per_core[j]++;
-                store_ins++;
 
                 idle_cycles_per_core[j] += this_cycles;
-                idle_cycles += this_cycles;
+
+                if (from_state == Modified || from_state == Exclusive) {
+                    private_accesses++;
+                } else if (from_state == Shared) {
+                    shared_accesses++;
+                }
+
+                std::cout << j << " [store] prev_state:" << LRUSet::get_cache_state_str(from_state)
+                          << " curr_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case OTHER:
                 this_cycles = ins.value;
                 compute_cycles_per_core[j] += this_cycles;
-                compute_cycles += this_cycles;
                 break;
             default:
+                break;
             }
 
             cycles_per_core[j] += this_cycles;
-            total_cycles += this_cycles;
-
             i++;
 
             // std::cout << "cycles: " << std::dec << this_cycles << std::endl;
@@ -136,23 +136,11 @@ void CPU::run() {
         std::cout << std::endl;
     }
 
+    std::cout << "[Global]" << std::endl;
     std::cout << "Total bus traffic (bytes): " << bus->get_total_traffic() << std::endl;
     std::cout << "Total bus invalidations / updates: " << bus->get_total_invalidations() << std::endl;
-    std::cout << "Private data access (%): " << std::endl;
-    std::cout << "Shared data access (%): " << std::endl;
-
-    // std::cout << "Total cycles: " << total_cycles << std::endl;
-    // std::cout << "Compute cycles: " << compute_cycles << std::endl;
-    // // std::cout << "Load/store instructions: " << load_store_ins << std::endl;
-    // std::cout << "Load instructions: " << load_ins << std::endl;
-    // std::cout << "Store instructions: " << store_ins << std::endl;
-    // std::cout << "Idle cycles: " << idle_cycles << std::endl;
-    // int hit_percent = static_cast<float>(cache_hits) / load_store_ins * 1000;
-    // int miss_percent = 1000 - hit_percent;
-    // std::cout << "Cache hits: " << cache_hits << " (" << hit_percent / 10 << "." << hit_percent % 10 << "%)" << std::endl;
-    // std::cout << "Cache misses: " << cache_misses << " (" << miss_percent / 10 << "." << miss_percent % 10 << "%)" << std::endl;
-    // std::cout << "Total bus traffic (bytes): " << bus->get_total_traffic() << std::endl;
-    // std::cout << "Total bus invalidations: " << bus->get_total_invalidations() << std::endl;
-    // std::cout << "Private data access (%): " <<  << std::endl;
-    // std::cout << "Shared data access (%): " <<  << std::endl;
+    int private_accesses_thousandth = static_cast<float>(private_accesses) / (private_accesses + shared_accesses) * 1000;
+    std::cout << "Private data access (%): " << private_accesses_thousandth / 10 << "." << private_accesses_thousandth % 10 << std::endl;
+    int shared_accesses_thousandth = 1000 - private_accesses_thousandth;
+    std::cout << "Shared data access (%): " << shared_accesses_thousandth / 10 << "." << shared_accesses_thousandth % 10 << std::endl;
 }

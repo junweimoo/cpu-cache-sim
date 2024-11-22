@@ -81,7 +81,7 @@ CacheState LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_id
 
     auto tags_iter = map_iter->second;
 
-    // send bus signal
+    // send bus signal if state is shared or invalid
     CacheState current_state = tags_iter->second;
     if (current_state == Shared || current_state == Invalid) {
         bus->broadcast(ReadExclusive, address, sender_idx, current_state);
@@ -103,7 +103,7 @@ CacheState LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx
         return NotPresent;
     }
 
-    // send bus signal
+    // send bus signal if state is invalid
     auto tags_iter = it->second;
     CacheState current_state = tags_iter->second;
     if (current_state == Invalid) {
