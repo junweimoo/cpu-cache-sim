@@ -1,61 +1,72 @@
 #include "bus.h"
 #include "memory.h"
 
-Bus::Bus(int _block_size) : total_invalidations(0), total_traffic(0), block_size(_block_size) {}
+Bus::Bus(int _block_size) : total_invalidations_updates(0), total_traffic(0), block_size(_block_size) {}
 
 BusResponse Bus::broadcast(BusMessage message, uint32_t address, int sender_idx, CacheState sender_cache_state) {
     if (message == WriteBack) {
+        // Cache block is written back to memory
         total_traffic++;
         return NoResponse;
     }
 
     if (message == BusUpdate) {
+        // Dragon: Cache block is sent to other caches
         total_traffic++;
     }
 
-    BusResponse response = NoResponse;
+    BusResponse orSharedResponses = NoResponse;
+    BusResponse orDirtyResponses = NoResponse;
     for (int i = 0; i < memory_blocks.size(); i++) {
         // broadcast to other memory blocks apart from sender
         if (i == sender_idx) continue;
+        BusResponse thisResponse = memory_blocks[i]->process_signal_from_bus(message, address, this);
 
-        if (memory_blocks[i]->process_signal_from_bus(message, address, this) == HasCopy) {
-            // this cache address is also in another processor's cache
-            response = HasCopy;
+        if (thisResponse == BusResponseShared) {
+            // this cache block is also in another clean cache
+            orSharedResponses = BusResponseShared;
+        }
 
-            // MESI: Only the ReadExclusive signal causes invalidations
-            if (message == ReadExclusive) {
-                total_invalidations++;
-            }
+        if (thisResponse == BusResponseDirty) {
+            // this cache block is also in another dirty cache
+            orDirtyResponses = BusResponseDirty;
         }
 
         if (message == BusUpdate) {
-            total_invalidations++;
+            // Dragon: BusUpd updates other copies
+            total_invalidations_updates++;
+        }
+
+        if (message == ReadExclusive && thisResponse != NoResponse) {
+            // MESI: BusReadX invalidates other copies
+            total_invalidations_updates++;
         }
     }
 
-    // MESI: cache to cache data transfer over bus
-    if ((message == ReadExclusive || message == Read) &&
-        response == HasCopy &&
-        (sender_cache_state == Invalid || sender_cache_state == NotPresent)) {
-        // traffic for cache-to-cache sharing
+    BusResponse finalResponse = orDirtyResponses == BusResponseDirty ? BusResponseDirty :
+                                orSharedResponses == BusResponseShared ? BusResponseShared :
+                                NoResponse;
+
+    if ((message == ReadExclusive || message == Read) && (finalResponse != NoResponse)) {
+        // MESI: cache to cache transfer of cache block
         total_traffic++;
     }
 
-    // Dragon: cache to cache data transfer over bus
-    if (message == ReadDragon && response == HasCopy && sender_cache_state == NotPresent) {
+    if (message == ReadDragon && finalResponse != NoResponse) {
+        // Dragon: cache to cache transfer of cache block
         total_traffic++;
     }
 
-    return response;
+    return finalResponse;
 }
 
 long Bus::get_total_traffic() const {
-    return total_traffic * block_size;
-    // return total_traffic;
+    // return total_traffic * block_size;
+    return total_traffic;
 }
 
 long Bus::get_total_invalidations() const {
-    return total_invalidations;
+    return total_invalidations_updates;
 }
 
 void Bus::connect_memory(Memory* mem) {

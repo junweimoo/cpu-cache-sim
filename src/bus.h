@@ -18,7 +18,7 @@ public:
 private:
     // total traffic from read, read exclusive, write back in bytes
     long long total_traffic;
-    long total_invalidations;
+    long total_invalidations_updates;
     int block_size;
 
     std::vector<Memory*> memory_blocks;

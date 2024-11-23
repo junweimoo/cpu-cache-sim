@@ -17,7 +17,8 @@ enum BusMessage {
 
 enum BusResponse {
     NoResponse,
-    HasCopy,
+    BusResponseShared,
+    BusResponseDirty,
 };
 
 enum CacheState {

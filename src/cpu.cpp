@@ -21,7 +21,7 @@ void CPU::connect_bus(Bus *_bus) {
 }
 
 void CPU::run() {
-    bool is_debug = false;
+    bool is_debug = true;
 
     std::cout << "Running CPU simulation..." << std::endl;
 
@@ -76,14 +76,14 @@ void CPU::run() {
 
                 idle_cycles_per_core[j] += this_cycles;
 
-                if (from_state == Modified || from_state == Exclusive || from_state == ExclusiveDragon || from_state == Dirty) {
+                if (to_state == Modified || to_state == Exclusive || to_state == ExclusiveDragon || to_state == Dirty) {
                     private_accesses++;
-                } else if (from_state == Shared || from_state == SharedModified || from_state == SharedClean) {
+                } else if (to_state == Shared || to_state == SharedModified || to_state == SharedClean) {
                     shared_accesses++;
                 }
 
                 if (is_debug)
-                    std::cout << j << " [load] from_state:" << LRUSet::get_cache_state_str(from_state)
+                    std::cout << "core" << j <<  " " << i << " [load] from_state:" << LRUSet::get_cache_state_str(from_state)
                               << " to_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case STORE:
@@ -99,14 +99,14 @@ void CPU::run() {
 
                 idle_cycles_per_core[j] += this_cycles;
 
-                if (from_state == Modified || from_state == Exclusive || from_state == ExclusiveDragon || from_state == Dirty) {
+                if (to_state == Modified || to_state == Exclusive || to_state == ExclusiveDragon || to_state == Dirty) {
                     private_accesses++;
-                } else if (from_state == Shared || from_state == SharedModified || from_state == SharedClean) {
+                } else if (to_state == Shared || to_state == SharedModified || to_state == SharedClean) {
                     shared_accesses++;
                 }
 
                 if (is_debug)
-                    std::cout << j << " [store] from_state:" << LRUSet::get_cache_state_str(from_state)
+                    std::cout << "core" << j <<  " " << i << " [store] from_state:" << LRUSet::get_cache_state_str(from_state)
                               << " to_state:" << LRUSet::get_cache_state_str(to_state) << std::endl;
                 break;
             case OTHER:
@@ -118,10 +118,10 @@ void CPU::run() {
             }
 
             cycles_per_core[j] += this_cycles;
-            i++;
 
             if (is_debug) std::cout << "cycles: " << std::dec << this_cycles << std::endl;
         }
+        i++;
     }
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -145,7 +145,7 @@ void CPU::run() {
     for (int j = 1; j < num_cores; j++) {
         max_cycles = std::max(max_cycles, cycles_per_core[j]);
     }
-    std::cout << "Total cycles (maximum among cores): " << max_cycles << std::endl;
+    std::cout << "Overall cycles (maximum among cores): " << max_cycles << std::endl;
 
     long long total_idle_cycles = 0;
     for (int j = 0; j < num_cores; j++) {

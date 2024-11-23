@@ -85,23 +85,35 @@ std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus*
             stateOfNewLine = Modified;
         } else {
             response = bus->broadcast(Read, address, sender_idx, NotPresent);
-            stateOfNewLine = response == HasCopy ? Shared : Exclusive;
+            if (response == BusResponseShared || response == BusResponseDirty) {
+                // Other copies present -> new cache block is Shared
+                stateOfNewLine = Shared;
+            } else if (response == NoResponse) {
+                // No other copies -> new cache block is Exclusive
+                stateOfNewLine = Exclusive;
+            }
         }
     }
 
-    // Dragon:
+    // Dragon: broadcast message and set state of new cache line
     if (protocol == Dragon) {
         if (is_write) {
             response = bus->broadcast(ReadDragon, address, sender_idx, NotPresent);
-            if (response == HasCopy) {
+            if (response == BusResponseShared || response == BusResponseDirty) {
+                bus->broadcast(BusUpdate, address, sender_idx, NotPresent);
                 stateOfNewLine = SharedModified;
-                bus->broadcast(BusUpdate, address, sender_idx, SharedModified);
             } else {
                 stateOfNewLine = Dirty;
             }
         } else {
             response = bus->broadcast(ReadDragon, address, sender_idx, NotPresent);
-            stateOfNewLine = response == HasCopy ? SharedClean : ExclusiveDragon;
+            if (response == BusResponseShared || response == BusResponseDirty) {
+                // Other copies present -> new cache block is SharedClean
+                stateOfNewLine = SharedClean;
+            } else {
+                // No other copies -> new Cache block is Exclusive
+                stateOfNewLine = ExclusiveDragon;
+            }
         }
     }
 
@@ -121,26 +133,30 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::write(uint32_t tag, Bus*
     }
 
     auto tags_iter = map_iter->second;
-
-    // send bus signal if state is shared or invalid
     CacheState current_state = tags_iter->second;
     BusResponse response = NoResponse;
 
     // MESI: state transition due to write
     if (protocol == MESI) {
+        // Send BusRdX if state is Shared or Invalid
         if (current_state == Shared || current_state == Invalid) {
             response = bus->broadcast(ReadExclusive, address, sender_idx, current_state);
         }
-
-        // set to modified
         tags_iter->second = Modified;
     }
 
-    // Dragon:
+    // Dragon: state transition due to write
     if (protocol == Dragon) {
+        // Send BusUpd if state is Sc or Sm
         if (current_state == SharedClean || current_state == SharedModified) {
             response = bus->broadcast(BusUpdate, address, sender_idx, current_state);
-            tags_iter->second = response == HasCopy ? SharedModified : Dirty;
+            if (response == BusResponseShared || response == BusResponseDirty) {
+                // Another cache with Sc / Sm -> transition to SharedModified
+                tags_iter->second = SharedModified;
+            } else if (response == NoResponse) {
+                // No other copies -> transition to Dirty
+                tags_iter->second = Dirty;
+            }
         } else if (current_state == ExclusiveDragon) {
             tags_iter->second = Dirty;
         }
@@ -159,16 +175,16 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::read(uint32_t tag, Bus* 
         return {NotPresent, NoResponse, NotPresent};
     }
 
-    // send bus signal if state is invalid
     auto tags_iter = it->second;
     CacheState current_state = tags_iter->second;
     BusResponse response = NoResponse;
 
     // MESI: state transition due to read
     if (protocol == MESI) {
+        // Send BusRd if state is Invalid
         if (current_state == Invalid) {
             response = bus->broadcast(Read, address, sender_idx, current_state);
-            if (response == HasCopy) {
+            if (response == BusResponseShared || response == BusResponseDirty) {
                 tags_iter->second = Shared;
             } else if (response == NoResponse) {
                 tags_iter->second = Exclusive;
@@ -194,7 +210,7 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
         return NoResponse;
     }
 
-    // switch state according to protocol
+    // process bus message according to protocol
     auto tags_iter = map_iter->second;
     CacheState current_state = tags_iter->second;
 
@@ -202,20 +218,31 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
         // MESI signals
         case Read:
             if (current_state == Modified) {
+                bus->broadcast(WriteBack, address, sender_idx, current_state);
                 tags_iter->second = Shared;
-                // bus->broadcast(WriteBack, address, sender_idx, Shared);
-            } else if (current_state == Exclusive) {
+                return BusResponseDirty;
+            }
+            if (current_state == Exclusive) {
                 tags_iter->second = Shared;
+                return BusResponseShared;
+            }
+            if (current_state == Shared) {
+                return BusResponseShared;
             }
             break;
         case ReadExclusive:
             if (current_state == Modified) {
+                bus->broadcast(WriteBack, address, sender_idx, current_state);
                 tags_iter->second = Invalid;
-                // bus->broadcast(WriteBack, address, sender_idx, Invalid);
-            } else if (current_state == Exclusive) {
+                return BusResponseDirty;
+            }
+            if (current_state == Exclusive) {
                 tags_iter->second = Invalid;
-            } else if (current_state == Shared) {
+                return BusResponseShared;
+            }
+            if (current_state == Shared) {
                 tags_iter->second = Invalid;
+                return BusResponseShared;
             }
             break;
 
@@ -223,13 +250,19 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
         case ReadDragon:
             if (current_state == ExclusiveDragon) {
                 tags_iter->second = SharedClean;
-            } else if (current_state == Dirty) {
+                return BusResponseShared;
+            }
+            if (current_state == Dirty) {
+                bus->broadcast(WriteBack, address, sender_idx, current_state);
                 tags_iter->second = SharedModified;
-                // Flush
-                // bus->broadcast(WriteBack, address, sender_idx, SharedModified);
-            } else if (current_state == SharedModified) {
-                // Flush
-                // bus->broadcast(WriteBack, address, sender_idx, SharedModified);
+                return BusResponseDirty;
+            }
+            if (current_state == SharedClean) {
+                return BusResponseShared;
+            }
+            if (current_state == SharedModified) {
+                bus->broadcast(WriteBack, address, sender_idx, current_state);
+                return BusResponseDirty;
             }
             break;
         case BusUpdate:
@@ -244,10 +277,5 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
             break;
     }
 
-    if (current_state == Modified || current_state == Exclusive || current_state == Shared
-            || current_state == SharedClean || current_state == SharedModified || current_state == ExclusiveDragon
-            || current_state == Dirty) {
-        return HasCopy;
-    }
     return NoResponse;
 }
