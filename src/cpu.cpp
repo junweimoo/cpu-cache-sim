@@ -165,9 +165,11 @@ void CPU::run() {
         total_misses += cache_misses_per_core[j];
     }
     int hit_rate_thousandth = static_cast<float>(total_hits) / (total_hits + total_misses) * 1000;
-    std::cout << "Cache hit rate (%): " << hit_rate_thousandth / 10 << "." << hit_rate_thousandth % 10 << std::endl;
+    std::cout << "Cache hit rate (%): " << hit_rate_thousandth / 10 << "." << hit_rate_thousandth % 10
+              << " (" << total_hits << ")" << std::endl;
     int miss_rate_thousandth = 1000 - hit_rate_thousandth;
-    std::cout << "Cache miss rate (%): " << miss_rate_thousandth / 10 << "." << miss_rate_thousandth % 10 << std::endl;
+    std::cout << "Cache miss rate (%): " << miss_rate_thousandth / 10 << "." << miss_rate_thousandth % 10
+              << " (" << total_misses << ")" << std::endl;
 
     std::cout << "Total bus traffic (bytes): " << bus->get_total_traffic() << std::endl;
     std::cout << "Total bus invalidations / updates: " << bus->get_total_invalidations() << std::endl;
