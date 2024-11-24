@@ -266,8 +266,12 @@ BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bu
             }
             break;
         case BusUpdate:
+            if (current_state == SharedClean) {
+                return BusResponseShared;
+            }
             if (current_state == SharedModified) {
                 tags_iter->second = SharedClean;
+                return BusResponseDirty;
             }
             break;
 

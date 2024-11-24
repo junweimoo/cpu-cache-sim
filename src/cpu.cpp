@@ -21,7 +21,7 @@ void CPU::connect_bus(Bus *_bus) {
 }
 
 void CPU::run() {
-    bool is_debug = true;
+    bool is_debug = false;
 
     std::cout << "Running CPU simulation..." << std::endl;
 
@@ -61,6 +61,9 @@ void CPU::run() {
             int this_cycles;
             bool is_hit;
             CacheState from_state, to_state;
+
+            int prev_traffic = bus->get_total_traffic();
+            int prev_invalidations = bus->get_total_invalidations();
 
             switch (ins.type) {
                 case LOAD:
@@ -119,7 +122,9 @@ void CPU::run() {
 
             cycles_per_core[j] += this_cycles;
 
-            if (is_debug) std::cout << "cycles: " << std::dec << this_cycles << std::endl;
+            if (is_debug) std::cout << "cycles: " << std::dec << this_cycles
+                                    << " traffic: " << bus->get_total_traffic() - prev_traffic
+                                    << " invalidations/updates: " << bus->get_total_invalidations() << std::endl;
         }
         i++;
     }

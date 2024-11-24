@@ -61,8 +61,8 @@ BusResponse Bus::broadcast(BusMessage message, uint32_t address, int sender_idx,
 }
 
 long Bus::get_total_traffic() const {
-    // return total_traffic * block_size;
-    return total_traffic;
+    return total_traffic * block_size;
+    // return total_traffic;
 }
 
 long Bus::get_total_invalidations() const {
