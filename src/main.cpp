@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 
     // simulate
     std::cout << "Protocol: " << (protocol == Dragon ? "Dragon" : "MESI") <<  std::endl;
-    cpu.run();
+    cpu.run_parallel();
 
     return 0;
 }

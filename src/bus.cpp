@@ -4,6 +4,8 @@
 Bus::Bus(int _block_size) : total_invalidations_updates(0), total_traffic(0), block_size(_block_size) {}
 
 BusResponse Bus::broadcast(BusMessage message, uint32_t address, int sender_idx, CacheState sender_cache_state) {
+    // std::lock_guard<std::mutex> lock(mtx);
+
     if (message == WriteBack) {
         // Cache block is written back to memory
         total_traffic++;

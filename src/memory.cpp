@@ -9,7 +9,10 @@ Memory::Memory(int _index, int cache_size, int associativity, int block_size, in
     protocol = _protocol;
 
     int num_sets = cache_size / (block_size * associativity);
-    cache.resize(num_sets, LRUSet(associativity, _protocol));
+    cache.reserve(num_sets);
+    for (size_t i = 0; i < num_sets; ++i) {
+        cache.emplace_back(std::make_unique<LRUSet>(associativity, _protocol));
+    }
 
     offset_bits = std::log2(block_size);
     set_index_bits = std::log2(num_sets);
@@ -27,18 +30,18 @@ Memory::Memory(int _index, int cache_size, int associativity, int block_size, in
 BusResponse Memory::process_signal_from_bus(BusMessage message, uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
-    LRUSet& cache_set = cache[set_index];
-    return cache_set.process_signal_from_bus(tag, message, bus, address, core_index);
+    std::unique_ptr<LRUSet>& cache_set = cache[set_index];
+    return cache_set->process_signal_from_bus(tag, message, bus, address, core_index);
 }
 
 std::tuple<int, bool, CacheState, CacheState> Memory::load(uint32_t address, Bus* bus) {
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
 
-    LRUSet& cache_set = cache[set_index];
+    std::unique_ptr<LRUSet>& cache_set = cache[set_index];
     CacheState prev_state, curr_state;
     BusResponse response;
-    std::tie(prev_state, response, curr_state) = cache_set.read(tag, bus, address, core_index);
+    std::tie(prev_state, response, curr_state) = cache_set->read(tag, bus, address, core_index);
 
     // MESI
     if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
@@ -63,8 +66,8 @@ std::tuple<int, bool, CacheState, CacheState> Memory::load(uint32_t address, Bus
 
     // Not present in cache -> allocate
     bool is_evicted;
-    std::tie(is_evicted, response) = cache_set.allocate(tag, false, bus, address, core_index);
-    curr_state = cache_set.get_state(tag);
+    std::tie(is_evicted, response) = cache_set->allocate(tag, false, bus, address, core_index);
+    curr_state = cache_set->get_state(tag);
     int cycles = 0;
 
     if (protocol == MESI) {
@@ -95,19 +98,16 @@ std::tuple<int, bool, CacheState, CacheState> Memory::store(uint32_t address, Bu
     uint32_t offset, set_index, tag;
     std::tie(offset, set_index, tag) = compute_tag_idx_offset(address);
 
-    LRUSet& cache_set = cache[set_index];
+    std::unique_ptr<LRUSet>& cache_set = cache[set_index];
     CacheState prev_state, curr_state;
     BusResponse response;
-    std::tie(prev_state, response, curr_state) = cache_set.write(tag, bus, address, core_index);
+    std::tie(prev_state, response, curr_state) = cache_set->write(tag, bus, address, core_index);
 
     // MESI
     if (prev_state == Modified || prev_state == Exclusive || prev_state == Shared) {
         // cache hit -> write to cache
         return {Config::CACHE_HIT_TIME, true, prev_state, curr_state};
     } else if (prev_state == Invalid) {
-        // if (response == HasCopy) {
-        //     return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
-        // }
         if (response == BusResponseShared) {
             return {Config::SEND_WORD_TIME + Config::CACHE_HIT_TIME, false, prev_state, curr_state};
         } else if (response == BusResponseDirty) {
@@ -128,8 +128,8 @@ std::tuple<int, bool, CacheState, CacheState> Memory::store(uint32_t address, Bu
 
     // cache miss -> allocate
     bool is_evicted;
-    std::tie(is_evicted, response) = cache_set.allocate(tag, false, bus, address, core_index);
-    curr_state = cache_set.get_state(tag);
+    std::tie(is_evicted, response) = cache_set->allocate(tag, false, bus, address, core_index);
+    curr_state = cache_set->get_state(tag);
     int cycles = 0;
 
     if (protocol == MESI) {

@@ -32,13 +32,21 @@ LRUSet::LRUSet(int associativity, Protocol _protocol) : max_size(associativity),
 }
 
 CacheState LRUSet::get_state(uint32_t tag) {
+    std::lock_guard<std::mutex> lock(mtx);
     auto map_iter = map.find(tag);
     if (map_iter == map.end()) return NotPresent;
     return map_iter->second->second;
 }
 
+BusResponse LRUSet::unlock_and_broadcast(std::unique_lock<std::mutex>& lock, Bus* bus, BusMessage message, uint32_t address, int sender_idx, CacheState sender_cache_state) {
+    lock.unlock();
+    BusResponse res = bus->broadcast(message, address, sender_idx, sender_cache_state);
+    lock.lock();
+    return res;
+}
 
 std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus* bus, uint32_t address, int sender_idx) {
+    std::unique_lock<std::mutex> lock(mtx);
     auto it = map.find(tag);
 
     if (it != map.end()) {
@@ -55,7 +63,7 @@ std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus*
         tags.pop_back();
         map.erase(lru_tag);
 
-        // MESI: check if LRU cache needs to be flushe
+        // MESI: check if LRU cache needs to be flushed
         if (protocol == MESI) {
             if (state == Modified) {
                 flushed = true;
@@ -81,10 +89,10 @@ std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus*
     // MESI: broadcast message and set state of new cache line
     if (protocol == MESI) {
         if (is_write) {
-            response = bus->broadcast(ReadExclusive, address, sender_idx, NotPresent);
+            response = unlock_and_broadcast(lock, bus, ReadExclusive, address, sender_idx, NotPresent);
             stateOfNewLine = Modified;
         } else {
-            response = bus->broadcast(Read, address, sender_idx, NotPresent);
+            response = unlock_and_broadcast(lock, bus, Read, address, sender_idx, NotPresent);
             if (response == BusResponseShared || response == BusResponseDirty) {
                 // Other copies present -> new cache block is Shared
                 stateOfNewLine = Shared;
@@ -98,15 +106,15 @@ std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus*
     // Dragon: broadcast message and set state of new cache line
     if (protocol == Dragon) {
         if (is_write) {
-            response = bus->broadcast(ReadDragon, address, sender_idx, NotPresent);
+            response = unlock_and_broadcast(lock, bus, ReadDragon, address, sender_idx, NotPresent);
             if (response == BusResponseShared || response == BusResponseDirty) {
-                bus->broadcast(BusUpdate, address, sender_idx, NotPresent);
+                unlock_and_broadcast(lock, bus, BusUpdate, address, sender_idx, NotPresent);
                 stateOfNewLine = SharedModified;
             } else {
                 stateOfNewLine = Dirty;
             }
         } else {
-            response = bus->broadcast(ReadDragon, address, sender_idx, NotPresent);
+            response = unlock_and_broadcast(lock, bus, ReadDragon, address, sender_idx, NotPresent);
             if (response == BusResponseShared || response == BusResponseDirty) {
                 // Other copies present -> new cache block is SharedClean
                 stateOfNewLine = SharedClean;
@@ -125,6 +133,7 @@ std::tuple<bool, BusResponse> LRUSet::allocate(uint32_t tag, bool is_write, Bus*
 }
 
 std::tuple<CacheState, BusResponse, CacheState> LRUSet::write(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
+    std::unique_lock<std::mutex> lock(mtx);
     auto map_iter = map.find(tag);
 
     if (map_iter == map.end()) {
@@ -140,7 +149,7 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::write(uint32_t tag, Bus*
     if (protocol == MESI) {
         // Send BusRdX if state is Shared or Invalid
         if (current_state == Shared || current_state == Invalid) {
-            response = bus->broadcast(ReadExclusive, address, sender_idx, current_state);
+            response =  unlock_and_broadcast(lock, bus, ReadExclusive, address, sender_idx, current_state);
         }
         tags_iter->second = Modified;
     }
@@ -149,7 +158,7 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::write(uint32_t tag, Bus*
     if (protocol == Dragon) {
         // Send BusUpd if state is Sc or Sm
         if (current_state == SharedClean || current_state == SharedModified) {
-            response = bus->broadcast(BusUpdate, address, sender_idx, current_state);
+            response = unlock_and_broadcast(lock, bus, BusUpdate, address, sender_idx, current_state);
             if (response == BusResponseShared || response == BusResponseDirty) {
                 // Another cache with Sc / Sm -> transition to SharedModified
                 tags_iter->second = SharedModified;
@@ -168,6 +177,7 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::write(uint32_t tag, Bus*
 }
 
 std::tuple<CacheState, BusResponse, CacheState> LRUSet::read(uint32_t tag, Bus* bus, uint32_t address, int sender_idx) {
+    std::unique_lock<std::mutex> lock(mtx);
     auto it = map.find(tag);
 
     if (it == map.end()) {
@@ -183,7 +193,7 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::read(uint32_t tag, Bus* 
     if (protocol == MESI) {
         // Send BusRd if state is Invalid
         if (current_state == Invalid) {
-            response = bus->broadcast(Read, address, sender_idx, current_state);
+            response = unlock_and_broadcast(lock, bus, Read, address, sender_idx, current_state);
             if (response == BusResponseShared || response == BusResponseDirty) {
                 tags_iter->second = Shared;
             } else if (response == NoResponse) {
@@ -203,6 +213,7 @@ std::tuple<CacheState, BusResponse, CacheState> LRUSet::read(uint32_t tag, Bus* 
 }
 
 BusResponse LRUSet::process_signal_from_bus(uint32_t tag, BusMessage message, Bus* bus, uint32_t address, int sender_idx) {
+    std::unique_lock<std::mutex> lock(mtx);
     auto map_iter = map.find(tag);
 
     if (map_iter == map.end()) {

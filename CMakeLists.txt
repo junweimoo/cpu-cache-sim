@@ -5,4 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-add_executable(cpu_cache_sim ${SOURCES})
+add_executable(cpu_cache_sim ${SOURCES}
+        src/profiler.cpp
+        src/profiler.h)

@@ -2,6 +2,7 @@
 #define BUS_H
 
 #include <cstdint>
+#include <mutex>
 #include <vector>
 #include "enums.h"
 
@@ -20,6 +21,7 @@ private:
     long long total_traffic;
     long total_invalidations_updates;
     int block_size;
+    std::mutex mtx;
 
     std::vector<Memory*> memory_blocks;
 };

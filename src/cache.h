@@ -2,6 +2,8 @@
 #define CACHE_H
 
 #include <list>
+#include <mutex>
+
 #include "enums.h"
 
 class Bus;
@@ -23,12 +25,15 @@ public:
 
     explicit LRUSet(int associativity, Protocol _protocol);
 private:
+    std::mutex mtx;
     Protocol protocol;
     int max_size;
     // list of pairs of {tag, state}
     std::list<std::pair<uint32_t, CacheState>> tags;
     // map from tag to iterator pointing to the pair of {tag, state} in the list of tags
     std::unordered_map<uint32_t, std::list<std::pair<uint32_t, CacheState>>::iterator> map;
+    BusResponse unlock_and_broadcast(std::unique_lock<std::mutex>& lock, Bus* bus, BusMessage message, uint32_t address,
+        int sender_idx, CacheState sender_cache_state);
 };
 
 #endif //CACHE_H

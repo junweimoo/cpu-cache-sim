@@ -37,7 +37,7 @@ private:
     uint32_t tag_mask;
 
     // LRU sets indexed by set index
-    std::vector<LRUSet> cache;
+    std::vector<std::unique_ptr<LRUSet>> cache;
 };
 
 #endif
